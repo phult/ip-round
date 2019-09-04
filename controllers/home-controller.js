@@ -20,34 +20,13 @@ function HomeController($config, $event, $logger) {
     }
     this.establish = async function (io) {
         var establishResult = true;
-        var connectionResult = true;
         await disconnect().catch(function (error) {
             $logger.error("error", error);
             establishResult = false;
         });
-        if (establishResult) {
-            connectionResult = await new Promise((resolve, reject) => {
-                var retryCount = 20;
-                var intervalTime = 800;
-                var isConnected = false;
-                var interval = setInterval(async function () {
-                    $logger.debug("Waiting for connection...");
-                    isConnected = await checkConnection().catch(function (error) {
-                        isConnected = false;
-                    });
-                    retryCount--;
-                    if (isConnected || retryCount <= 0) {
-                        clearInterval(interval);
-                        if (isConnected) {
-                            $logger.debug("Connected.");
-                            resolve(true);
-                        } else {
-                            $logger.debug("Not yet connected.");
-                            resolve(false);
-                        }
-                    }
-                }, intervalTime);
-            });
+        var connectionResult = true;
+        if (!establishResult) {
+            connectionResult = await retryConnection();
         }
         io.json({
             status: (establishResult && connectionResult) ? "successful" : "fail"
@@ -67,6 +46,30 @@ function HomeController($config, $event, $logger) {
                 $logger.debug("Disconnected.");
                 resolve();
             });
+        });
+    }
+    function retryConnection() {
+        return new Promise((resolve, reject) => {
+            var retryCount = 20;
+            var intervalTime = 800;
+            var isConnected = false;
+            var interval = setInterval(async function () {
+                $logger.debug("Waiting for connection...");
+                isConnected = await checkConnection().catch(function (error) {
+                    isConnected = false;
+                });
+                retryCount--;
+                if (isConnected || retryCount <= 0) {
+                    clearInterval(interval);
+                    if (isConnected) {
+                        $logger.debug("Connected.");
+                        resolve(true);
+                    } else {
+                        $logger.debug("Not yet connected.");
+                        resolve(false);
+                    }
+                }
+            }, intervalTime);
         });
     }
     function checkConnection() {
