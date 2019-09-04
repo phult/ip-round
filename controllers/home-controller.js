@@ -19,24 +19,38 @@ function HomeController($config, $event, $logger) {
         });
     }
     this.establish = async function (io) {
-        var result = "successful";
+        var establishResult = true;
+        var connectionResult = true;
         await disconnect().catch(function (error) {
             $logger.error("error", error);
-            result = "fail";
+            establishResult = false;
         });
-        if (result == "successful") {
-            var isConnected = false;
-            while (!isConnected) {
-                $logger.debug("Waiting for connection...");
-                isConnected = true;
-                await checkConnection().catch(function (error) {
-                    isConnected = false;
-                });
-            }
-            $logger.debug("Connected.");
+        if (establishResult) {
+            connectionResult = await new Promise((resolve, reject) => {
+                var retryCount = 20;
+                var intervalTime = 800;
+                var isConnected = false;
+                var interval = setInterval(async function () {
+                    $logger.debug("Waiting for connection...");
+                    isConnected = await checkConnection().catch(function (error) {
+                        isConnected = false;
+                    });
+                    retryCount--;
+                    if (isConnected || retryCount <= 0) {
+                        clearInterval(interval);
+                        if (isConnected) {
+                            $logger.debug("Connected.");
+                            resolve(true);
+                        } else {
+                            $logger.debug("Not yet connected.");
+                            resolve(false);
+                        }
+                    }
+                }, intervalTime);
+            });
         }
         io.json({
-            status: result
+            status: (establishResult && connectionResult) ? "successful" : "fail"
         });
     }
     function disconnect() {
@@ -59,9 +73,9 @@ function HomeController($config, $event, $logger) {
         return new Promise((resolve, reject) => {
             dns.resolve('www.google.com', function (err) {
                 if (err) {
-                    reject();
+                    reject(false);
                 } else {
-                    resolve();
+                    resolve(true);
                 }
             });
         });
